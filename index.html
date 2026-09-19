@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gemini Ultra - Multi AI + Instant Mode</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gemini: {
+                            bg: '#0e0f12',
+                            sidebar: '#16181d',
+                            surface: '#1c1f26',
+                            accent: '#8ab4f8',
+                            purple: '#c58af9'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100dvh;
+            overflow: hidden; background-color: #0e0f12; color: #e3e3e3;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        #bgCanvas {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh;
+            pointer-events: none; z-index: 0;
+        }
+        .glass {
+            background: rgba(22, 24, 29, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-pill {
+            background: rgba(28, 31, 38, 0.85);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .gemini-gradient-text {
+            background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .gemini-gradient-bg {
+            background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570);
+        }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+    </style>
+</head>
+<body class="flex h-[100dvh] w-screen relative">
+
+    <!-- Interactive Canvas Background -->
+    <canvas id="bgCanvas"></canvas>
+
+    <!-- Sidebar Overlay / Drawer -->
+    <div id="sidebarOverlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-30 hidden md:hidden"></div>
+    <aside id="sidebar" class="fixed md:static inset-y-0 left-0 glass w-72 md:w-64 h-full flex flex-col justify-between z-40 transition-transform duration-300 transform -translate-x-full md:translate-x-0">
+        <div class="p-4 flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+                <button onclick="newChat()" class="flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/15 transition text-sm font-medium w-fit">
+                    <i data-lucide="plus" class="w-4 h-4"></i> Đoạn chat mới
+                </button>
+                <button onclick="toggleSidebar()" class="p-2 hover:bg-white/10 rounded-full transition md:hidden">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <div class="mt-2">
+                <div class="text-xs font-semibold text-gray-400 px-2 mb-2">Gần đây</div>
+                <div class="flex flex-col gap-1 max-h-[50vh] overflow-y-auto">
+                    <a href="#" class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 text-sm truncate text-gray-300">
+                        <i data-lucide="message-square" class="w-4 h-4 shrink-0 text-gray-400"></i> Proxy Hybrid Mode
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4 border-t border-white/10 flex flex-col gap-2">
+            <button onclick="openApiModal()" class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 text-sm text-gemini-accent text-left w-full">
+                <i data-lucide="cpu" class="w-4 h-4"></i> Chọn AI & Cấu hình Key
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Container -->
+    <main class="flex-1 flex flex-col h-[100dvh] relative z-10 overflow-hidden">
+        
+        <!-- Top bar -->
+        <header class="flex items-center justify-between px-4 md:px-6 py-3 z-20 shrink-0">
+            <div class="flex items-center gap-2.5">
+                <button onclick="toggleSidebar()" class="p-2 hover:bg-white/10 rounded-full transition">
+                    <i data-lucide="menu" class="w-5 h-5"></i>
+                </button>
+                <div class="flex items-center gap-2 text-base md:text-lg font-semibold tracking-wide">
+                    <span class="gemini-gradient-text" id="brandTitle">Grok</span>
+                    <span id="activeModelBadge" class="text-[10px] md:text-xs px-2 py-0.5 rounded-full glass text-gemini-accent font-normal">grok-2-latest</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="openApiModal()" class="px-2.5 py-1.5 rounded-full glass text-[11px] md:text-xs text-gray-300 hover:text-white flex items-center gap-1">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5 text-gemini-accent"></i> <span id="currentProviderLabel">Grok</span>
+                </button>
+                <div class="w-7 h-7 md:w-8 md:h-8 rounded-full gemini-gradient-bg flex items-center justify-center text-xs font-bold text-white shadow-lg">H</div>
+            </div>
+        </header>
+
+        <!-- Chat Stream Area -->
+        <div id="chatContainer" class="flex-1 overflow-y-auto px-4 md:px-16 lg:px-36 py-4 flex flex-col gap-4">
+            <div id="welcomeScreen" class="flex flex-col items-start gap-1.5 mt-8 md:mt-12 transition-opacity duration-500">
+                <h1 class="text-3xl md:text-5xl font-semibold gemini-gradient-text tracking-tight">Chào Hiếu,</h1>
+                <p class="text-2xl md:text-4xl font-semibold text-gray-500">Hôm nay tôi giúp gì cho bạn?</p>
+            </div>
+        </div>
+
+        <!-- Input Area Footer -->
+        <footer class="p-3 md:px-16 lg:px-36 pb-4 md:pb-6 z-20 shrink-0">
+            <div class="glass-pill rounded-2xl md:rounded-3xl p-2.5 md:p-3 flex flex-col gap-2 transition-all focus-within:border-gemini-accent/50">
+                <textarea id="promptInput" rows="1" placeholder="Nhập lời nhắc (đang dùng Proxy)..." 
+                    class="w-full bg-transparent resize-none outline-none text-gray-200 placeholder-gray-500 px-2 py-1 max-h-28 text-sm md:text-base"
+                    oninput="autoResize(this)" onkeydown="handleKeyDown(event)"></textarea>
+                
+                <div class="flex items-center justify-between px-1 pt-1 border-t border-white/5">
+                    <div class="flex items-center gap-1">
+                        <button class="p-1.5 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition" title="Thêm tệp">
+                            <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+                    <button id="sendBtn" onclick="sendMessage()" class="p-2 rounded-full bg-white/10 text-gray-300 transition opacity-40 pointer-events-none" disabled>
+                        <i data-lucide="arrow-up" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="text-center text-[10px] md:text-[11px] text-gray-500 mt-1.5">
+                Đang kích hoạt Node.js Proxy (port 3000) • Chống CORS tuyệt đối.
+            </div>
+        </footer>
+
+    </main>
+
+    <!-- API Config Modal -->
+    <div id="apiModal" class="fixed inset-0 bg-black/75 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="glass w-full max-w-md rounded-2xl p-5 md:p-6 flex flex-col gap-4 border border-white/15 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base md:text-lg font-semibold text-white flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-5 h-5 text-gemini-accent"></i> Cấu hình AI Provider
+                </h3>
+                <button onclick="closeApiModal()" class="text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="flex flex-col gap-3">
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Chọn Provider / Engine</label>
+                    <select id="providerSelect" onchange="onProviderChange()" class="w-full bg-[#16181d] border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                        <option value="grok">xAI Grok API (Mặc định)</option>
+                        <option value="builtin">⚡ AI Tích hợp sẵn</option>
+                        <option value="gemini">Google Gemini API</option>
+                        <option value="openai">OpenAI ChatGPT (sk-...)</option>
+                        <option value="deepseek">DeepSeek AI (ds-...)</option>
+                        <option value="groq">Groq Cloud (gsk_...)</option>
+                    </select>
+                </div>
+                <div id="apiKeyGroup">
+                    <label class="text-xs text-gray-400 mb-1 block" id="apiKeyLabel">API Key</label>
+                    <input type="password" id="apiKeyInput" placeholder="Nhập API Key..." class="w-full bg-[#16181d] border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-gemini-accent">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 mb-1 block">Model ID</label>
+                    <input type="text" id="modelInput" value="grok-2-latest" class="w-full bg-[#16181d] border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-2">
+                <button onclick="closeApiModal()" class="px-4 py-2 rounded-xl bg-white/10 text-sm hover:bg-white/15">Hủy</button>
+                <button onclick="saveApiConfig()" class="px-4 py-2 rounded-xl gemini-gradient-bg text-sm font-semibold text-white shadow-lg">Lưu cấu hình</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script hợp nhất -->
+    <script>
+        lucide.createIcons();
+
+        let currentProvider = localStorage.getItem('ai_provider') || 'grok';
+        let currentModel = localStorage.getItem('ai_model') || 'grok-2-latest';
+        let apiKeys = {
+            gemini: localStorage.getItem('key_gemini') || '',
+            grok: localStorage.getItem('key_grok') || '',
+            openai: localStorage.getItem('key_openai') || '',
+            deepseek: localStorage.getItem('key_deepseek') || '',
+            groq: localStorage.getItem('key_groq') || ''
+        };
+
+        updateHeaderBadge();
+
+        function updateHeaderBadge() {
+            const labels = {
+                builtin: 'AI Sẵn có',
+                gemini: 'Gemini',
+                grok: 'Grok',
+                openai: 'OpenAI',
+                deepseek: 'DeepSeek',
+                groq: 'Groq'
+            };
+            document.getElementById('currentProviderLabel').textContent = labels[currentProvider] || 'AI';
+            document.getElementById('brandTitle').textContent = currentProvider === 'grok' ? 'Grok' : (currentProvider === 'gemini' ? 'Gemini' : 'AI Ultra');
+            document.getElementById('activeModelBadge').textContent = currentModel;
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            sidebar.classList.toggle('-translate-x-full');
+            if (window.innerWidth < 768) overlay.classList.toggle('hidden');
+        }
+
+        function openApiModal() {
+            document.getElementById('providerSelect').value = currentProvider;
+            onProviderChange();
+            if (currentProvider !== 'builtin') {
+                document.getElementById('apiKeyInput').value = apiKeys[currentProvider] || '';
+            }
+            document.getElementById('modelInput').value = currentModel;
+            document.getElementById('apiModal').classList.remove('hidden');
+        }
+
+        function closeApiModal() { document.getElementById('apiModal').classList.add('hidden'); }
+
+        function onProviderChange() {
+            const provider = document.getElementById('providerSelect').value;
+            const label = document.getElementById('apiKeyLabel');
+            const modelInput = document.getElementById('modelInput');
+            const keyGroup = document.getElementById('apiKeyGroup');
+
+            if (provider === 'builtin') {
+                keyGroup.style.display = 'none';
+                modelInput.value = 'builtin-smart';
+            } else {
+                keyGroup.style.display = 'block';
+                document.getElementById('apiKeyInput').value = apiKeys[provider] || '';
+                const defaults = {
+                    grok: 'grok-2-latest',
+                    gemini: 'gemini-1.5-flash',
+                    openai: 'gpt-4o-mini',
+                    deepseek: 'deepseek-chat',
+                    groq: 'llama-3.3-70b-versatile'
+                };
+                modelInput.value = defaults[provider] || 'default-model';
+                label.textContent = `${provider.toUpperCase()} API Key`;
+            }
+        }
+
+        function saveApiConfig() {
+            currentProvider = document.getElementById('providerSelect').value;
+            currentModel = document.getElementById('modelInput').value.trim() || 'default';
+            if (currentProvider !== 'builtin') {
+                const keyVal = document.getElementById('apiKeyInput').value.trim();
+                apiKeys[currentProvider] = keyVal;
+                localStorage.setItem(`key_${currentProvider}`, keyVal);
+            }
+            localStorage.setItem('ai_provider', currentProvider);
+            localStorage.setItem('ai_model', currentModel);
+            updateHeaderBadge();
+            closeApiModal();
+        }
+
+        // Canvas Background 60fps
+        const canvas = document.getElementById('bgCanvas');
+        const ctx = canvas.getContext('2d');
+        let width, height, particles = [];
+        let mouse = { x: -1000, y: -1000, radius: 140 };
+
+        function resizeCanvas() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
+        window.addEventListener('touchmove', (e) => { if(e.touches[0]) { mouse.x = e.touches[0].clientX; mouse.y = e.touches[0].clientY; } });
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * width; this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * 0.5; this.vy = (Math.random() - 0.5) * 0.5;
+                this.size = Math.random() * 1.8 + 0.6; this.baseAlpha = Math.random() * 0.4 + 0.2;
+                this.color = Math.random() > 0.5 ? '#8ab4f8' : '#c58af9';
+            }
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+                let dx = mouse.x - this.x, dy = mouse.y - this.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < mouse.radius) {
+                    let force = (mouse.radius - dist) / mouse.radius;
+                    this.x -= (dx / dist) * force * 1.5; this.y -= (dy / dist) * force * 1.5;
+                }
+            }
+            draw() {
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color; ctx.globalAlpha = this.baseAlpha; ctx.fill();
+            }
+        }
+
+        const particleCount = Math.min(Math.floor((window.innerWidth * window.innerHeight) / 15000), 60);
+        for (let i = 0; i < particleCount; i++) particles.push(new Particle());
+
+        function animateBg() {
+            ctx.clearRect(0, 0, width, height);
+            let time = Date.now() * 0.001;
+            let cx1 = width * 0.3 + Math.sin(time * 0.5) * 100, cy1 = height * 0.3 + Math.cos(time * 0.3) * 80;
+            let grad1 = ctx.createRadialGradient(cx1, cy1, 10, cx1, cy1, 300);
+            grad1.addColorStop(0, 'rgba(66, 133, 244, 0.08)'); grad1.addColorStop(1, 'transparent');
+            ctx.fillStyle = grad1; ctx.globalAlpha = 1; ctx.fillRect(0, 0, width, height);
+
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update(); particles[i].draw();
+                for (let j = i + 1; j < particles.length; j++) {
+                    let dx = particles[i].x - particles[j].x, dy = particles[i].y - particles[j].y;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 100) {
+                        ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y); ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.strokeStyle = '#8ab4f8'; ctx.globalAlpha = (1 - dist / 100) * 0.12; ctx.lineWidth = 0.6; ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animateBg);
+        }
+        animateBg();
+
+        function generateBuiltinResponse(prompt) {
+            return `Hiếu vừa hỏi: "${prompt}". (Đang dùng AI nội bộ)`;
+        }
+
+        // Chat Logic & Proxy Fetch
+        const promptInput = document.getElementById('promptInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const chatContainer = document.getElementById('chatContainer');
+        const welcomeScreen = document.getElementById('welcomeScreen');
+
+        promptInput.addEventListener('input', function() {
+            const hasText = this.value.trim() !== '';
+            sendBtn.disabled = !hasText;
+            sendBtn.className = hasText 
+                ? 'p-2 rounded-full bg-gemini-accent text-gray-900 transition' 
+                : 'p-2 rounded-full bg-white/10 text-gray-300 transition opacity-40 pointer-events-none';
+        });
+
+        function autoResize(el) { el.style.height = 'auto'; el.style.height = (el.scrollHeight) + 'px'; }
+        function handleKeyDown(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sendBtn.disabled) sendMessage(); } }
+        function newChat() { chatContainer.innerHTML = ''; }
+
+        function appendMessage(sender, text) {
+            if (welcomeScreen && welcomeScreen.parentNode) {
+                welcomeScreen.style.opacity = '0';
+                setTimeout(() => welcomeScreen.remove(), 400);
+            }
+            const isUser = sender === 'user';
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex ${isUser ? 'justify-end' : 'justify-start'} w-full`;
+            const msgDiv = document.createElement('div');
+            if (isUser) {
+                msgDiv.className = 'glass-pill max-w-[85%] md:max-w-[70%] px-4 py-2.5 rounded-2xl rounded-tr-sm text-sm md:text-base text-gray-100 leading-relaxed whitespace-pre-wrap';
+                msgDiv.textContent = text;
+            } else {
+                msgDiv.className = 'flex gap-3 max-w-[90%] md:max-w-[85%] leading-relaxed text-sm md:text-base text-gray-200';
+                msgDiv.innerHTML = `
+                    <div class="w-7 h-7 md:w-8 md:h-8 rounded-full gemini-gradient-bg flex items-center justify-center shrink-0 shadow-md mt-1">
+                        <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z"/></svg>
+                    </div>
+                    <div class="glass flex-1 p-3.5 md:p-4 rounded-2xl rounded-tl-sm text-gray-200 space-y-2 ai-response-text text-sm md:text-base whitespace-pre-wrap"></div>
+                `;
+            }
+            wrapper.appendChild(msgDiv);
+            chatContainer.appendChild(wrapper);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return msgDiv.querySelector('.ai-response-text');
+        }
+
+        async function fetchAIResponse(prompt) {
+            if (currentProvider === 'builtin') {
+                await new Promise(r => setTimeout(r, 400));
+                return generateBuiltinResponse(prompt);
+            }
+
+            const activeKey = apiKeys[currentProvider];
+            if (!activeKey) {
+                return `⚠️ Chưa nhập Key cho ${currentProvider.toUpperCase()}.`;
+            }
+
+            try {
+                const res = await fetch('http://localhost:3000/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: currentProvider,
+                        model: currentModel,
+                        prompt: prompt,
+                        apiKey: activeKey
+                    })
+                });
+                const data = await res.json();
+                return data.reply || "Không có phản hồi từ proxy.";
+            } catch (err) {
+                return `Lỗi kết nối Node.js Proxy (port 3000): ${err.message}. Nhớ chạy 'node server.js'!`;
+            }
+        }
+
+        function streamText(element, fullText) {
+            let i = 0; element.innerHTML = '';
+            const interval = setInterval(() => {
+                element.innerHTML += fullText.charAt(i); i++;
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                if (i >= fullText.length) clearInterval(interval);
+            }, 8);
+        }
+
+        async function sendMessage() {
+            const text = promptInput.value.trim(); if (!text) return;
+            appendMessage('user', text); promptInput.value = ''; promptInput.style.height = 'auto'; sendBtn.disabled = true;
+            const aiTextElement = appendMessage('ai', 'Đang xử lý qua proxy...');
+            const aiReply = await fetchAIResponse(text);
+            streamText(aiTextElement, aiReply);
+        }
+    </script>
+</body>
+</html>
